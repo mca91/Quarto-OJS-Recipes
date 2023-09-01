@@ -1,0 +1,495 @@
+---
+title: "Recipes for Observable plots in Quarto"
+subtitle: "Spiced with some R"
+author: "Martin C. Arnold"
+---
+
+Click [here](https://raw.githubusercontent.com/mca91/R-Quarto-OJS-recipes/main/obs_recipes.qmd) to see the raw source code of this document and [here](https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/mca91/R-Quarto-OJS-recipes/blob/main/obs_recipes.qmd) to download the quarto file.
+
+Observable offers many different ways to graph your data, but the line chart, bar chart, and scatterplot are basic and should definitely be learned. Tremendous flexibility and customisation are possible for such charts, but in this article we will cover only the simple cases--inspired by the ones presented [here](https://observablehq.com/@observablehq/chart-starter-recipes)--and focus on integrating them into a simple [Quarto document](https://quarto.org/docs/guide/) such that data can be manipulated and provided using R.
+
+## Preliminaries
+
+The `.qmd` file for generating this document has the following YAML header.
+
+```{YAML}
+---
+title: "A line graph of Apple stock close prices"
+author: "Martin C. Arnold"
+format: 
+  html:
+    css: styles.css 
+    code-fold: false
+---
+```
+
+`styles.css` contains the following CSS code for centering SVG elements in their enclosing divs.
+
+```{CSS}
+div > svg {
+  margin-left: auto;
+  margin-right: auto;
+}
+```
+
+::: {.column-margin}
+Observable plots are shown in SVG elements. Centering these is personal preference and thus optional 🙂.
+:::
+
+We will make use of the below R packages.
+
+```{r, warning=F, message=F}
+library(tidyverse)
+library(cowplot)
+library(reactable)
+```
+
+## Line chart
+
+We may to attach external data for Observable plots in a chunk with header ````{OJS}` and use the `FileAttachement()` function. We use the `.csv` method below since the we are dealing with a `.csv` file. The code below assumes that `aapl.csv` is in the same folder as the `.qmd` file. The `.csv` is attached with the observable notebook linked above.
+
+::: {.column-margin}
+Note that there's no need to include any JavaScript libraries in the document or chunk header--Quarto takes care of it!
+:::
+
+```{ojs, echo=T, eval=T}
+/* in OJS we would do it like this  */
+data = FileAttachment("aapl.csv")
+  .csv({typed: true});
+```
+
+We may now graph the data. Note that in line we set dimensions of the SVG element in line 2 using `width: 600, height: 400`.
+
+```{ojs}
+//| eval: true
+//| fig-cap: "Apple Stock -- close prices"
+
+Plot.plot({
+  width: 600, height: 400,
+  marks: [
+    Plot.ruleY([40]),
+    Plot.lineY(data, {x: "Date", y: "Close"})
+  ]
+})
+```
+::: {.column-margin}
+Here's an R version of the plot:
+
+```{r, message = FALSE, fig.cap="Some caption"}
+R_data <- read_csv(
+  "aapl.csv"
+)
+ggplot(R_data, 
+  aes(x = Date, y = Close)
+  ) + 
+  geom_line() +
+  theme_cowplot()
+```
+:::
+
+
+## Bar chart
+
+Similarly we may generate bar charts. Note that the dataset `alphabet` does not have to be included externally, because it is already available with the OJS library.
+
+```{ojs}
+//| eval: true
+//| fig-cap: "Relative frequencies of letters in `alphabet` dataset"
+
+Plot.plot({
+  width: 600, height: 400,
+  y: { label: "freq" },
+  marks: [
+    Plot.barY(
+      alphabet, 
+      {x: "letter", y: "frequency", sort: {x: "y", reverse: true}}
+    ),
+    Plot.ruleY([0])
+  ]
+})
+```
+
+## Scatterplot
+
+The dataset `cars` (I think it's the same data as in the popular R dataset) also comes with the OJS library . We create the scatterplot as follows:
+
+```{ojs}
+//| eval: true
+//| fig-cap: "Fuel economy of cars in `cars` dataset"
+
+Plot.plot({
+  width: 600, height: 400,
+  marks: [
+    Plot.dot(cars, {x: "power (hp)", y: "economy (mpg)"})
+  ]
+})
+```
+
+# Manipulating data with and supplying it using R   
+
+Let's play with the `iris` data in `R` and then make it available to Observable.js (OJS). We first allow users to glimpse at the data using [reactable](https://glin.github.io/reactable/).
+
+```{r, eval=T, echo=T, message=F}
+reactable::reactable(iris)
+```
+
+Next, we summarise variables by species (by computing group means for all variables in the datset).
+
+```{r}
+iris_means <- iris %>%
+  group_by(Species) %>%
+  summarise_all(.funs = mean)
+```
+
+R-data is made available to OJS using `ojs_define()`.
+
+```{r}
+ojs_define(
+  iris = iris,
+  iris_means = iris_means
+)
+```
+
+We may check that these data are indeed available to Observable: they are objects that hold multiple arrays. The following statements are evaluated in `ojs` chunks.
+
+```{ojs}
+iris
+iris_means
+```
+
+For the data to be "compatible" with Observable plot we need to `transpose()`. Below we plot `Sepal.Length` and `Sepal.Width` colored by `Species` and add marks for their group means.
+
+```{ojs}
+name = "iris"
+
+/* define plot object */
+iris_plot = Plot.plot({
+  width: 600, height: 400,
+  marks: [
+    Plot.dot(
+      transpose(iris), {
+        x: "Sepal.Length",
+        y: "Sepal.Width",
+        fill: "Species",
+        r: 3
+      }),
+
+    Plot.dot(transpose(iris_means), {
+       x: "Sepal.Length",
+       y: "Sepal.Width",
+       fill: "Species",
+       r: 6
+    })
+  ],
+  caption: `This is a plot of the ${name} dataset`
+})
+
+/* add legend for color */
+iris_plot.legend("color")
+```
+
+## D3.js
+
+Here's how to integrate D3 in the Quarto document. Below is a more involved example that replicates the US unemployment histogram shown [here](https://observablehq.com/@d3/histogram) (I've just removed the horizontal lines). Note that we need to download `unemployment-x.csv` from the notebook and insert it in the same folder as the `.qmd`.
+
+```{ojs}
+//| echo: true
+d3 = require("d3@7", "d3-array@3", "d3-axis@3", "d3-regression@1", "d3-scale@4", "d3-shape@3", "d3-selection@3")
+
+// Copyright 2021 Observable, Inc.
+// Released under the ISC license.
+// https://observablehq.com/@d3/histogram
+function Histogram(data, {
+  value = d => d, // convenience alias for x
+  domain, // convenience alias for xDomain
+  label, // convenience alias for xLabel
+  format, // convenience alias for xFormat
+  type = d3.scaleLinear, // convenience alias for xType
+  x = value, // given d in data, returns the (quantitative) x-value
+  y = () => 1, // given d in data, returns the (quantitative) weight
+  thresholds = 40, // approximate number of bins to generate, or threshold function
+  normalize, // whether to normalize values to a total of 100%
+  marginTop = 20, // top margin, in pixels
+  marginRight = 30, // right margin, in pixels
+  marginBottom = 30, // bottom margin, in pixels
+  marginLeft = 40, // left margin, in pixels
+  width = 600, // outer width of chart, in pixels
+  height = 400, // outer height of chart, in pixels
+  insetLeft = 0.5, // inset left edge of bar
+  insetRight = 0.5, // inset right edge of bar
+  xType = type, // type of x-scale
+  xDomain = domain, // [xmin, xmax]
+  xRange = [marginLeft, width - marginRight], // [left, right]
+  xLabel = label, // a label for the x-axis
+  xFormat = format, // a format specifier string for the x-axis
+  yType = d3.scaleLinear, // type of y-scale
+  yDomain, // [ymin, ymax]
+  yRange = [height - marginBottom, marginTop], // [bottom, top]
+  yLabel = "↑ Frequency", // a label for the y-axis
+  yFormat = normalize ? "%" : undefined, // a format specifier string for the y-axis
+  color = "currentColor" // bar fill color
+} = {}) {
+  // Compute values.
+  const X = d3.map(data, x);
+  const Y0 = d3.map(data, y);
+  const I = d3.range(X.length);
+
+  // Compute bins.
+  const bins = d3.bin().thresholds(thresholds).value(i => X[i])(I);
+  const Y = Array.from(bins, I => d3.sum(I, i => Y0[i]));
+  if (normalize) {
+    const total = d3.sum(Y);
+    for (let i = 0; i < Y.length; ++i) Y[i] /= total;
+  }
+
+  // Compute default domains.
+  if (xDomain === undefined) xDomain = [bins[0].x0, bins[bins.length - 1].x1];
+  if (yDomain === undefined) yDomain = [0, d3.max(Y)];
+
+  // Construct scales and axes.
+  const xScale = xType(xDomain, xRange);
+  const yScale = yType(yDomain, yRange);
+  const xAxis = d3.axisBottom(xScale).ticks(width / 80, xFormat).tickSizeOuter(0);
+  const yAxis = d3.axisLeft(yScale).ticks(height / 40, yFormat);
+  yFormat = yScale.tickFormat(100, yFormat);
+
+  const svg = d3.create("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .attr("viewBox", [0, 0, width, height])
+      .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
+
+  svg.append("g")
+      .attr("transform", `translate(${marginLeft},0)`)
+      .call(yAxis)
+      .call(g => g.select(".domain").remove())
+      .call(g => g.append("text")
+          .attr("x", -marginLeft)
+          .attr("y", 10)
+          .attr("fill", "currentColor")
+          .attr("text-anchor", "start")
+          .text(yLabel));
+
+  svg.append("g")
+      .attr("fill", color)
+    .selectAll("rect")
+    .data(bins)
+    .join("rect")
+      .attr("x", d => xScale(d.x0) + insetLeft)
+      .attr("width", d => Math.max(0, xScale(d.x1) - xScale(d.x0) - insetLeft - insetRight))
+      .attr("y", (d, i) => yScale(Y[i]))
+      .attr("height", (d, i) => yScale(0) - yScale(Y[i]))
+    .append("title")
+      .text((d, i) => [`${d.x0} ≤ x < ${d.x1}`, yFormat(Y[i])].join("\n"));
+
+  svg.append("g")
+      .attr("transform", `translate(0,${height - marginBottom})`)
+      .call(xAxis)
+      .call(g => g.append("text")
+          .attr("x", width - marginRight)
+          .attr("y", 27)
+          .attr("fill", "currentColor")
+          .attr("text-anchor", "end")
+          .text(xLabel));
+
+  return svg.node();
+}
+
+unemployment = FileAttachment("unemployment-x.csv").csv({typed: true})
+
+chart = Histogram(unemployment, {
+  value: d => d.rate,
+  label: "Unemployment rate (%) →",
+  color: "steelblue"
+})
+
+```
+
+# An interactive example: Sharp RDD
+
+```{r, echo = F}
+house_binned <-  read.csv("datasets/house_binned.csv")
+house <-  read.csv("datasets/house.csv")
+
+ojs_define(
+ house_binned = house_binned,
+ house = house
+)
+```
+
+```{ojs}
+//| echo: false
+html`
+<style>
+circle {
+  fill-opacity: .8;
+  stroke: #000;
+  stroke-opacity: 1;
+}
+.regression {
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.5px;
+}
+.axis line {
+  stroke: #ddd;
+}
+.axis .baseline line {
+  stroke: #555;
+}
+.axis .domain {
+  display: none;
+}
+</style>
+`
+
+margin = ({left: 55, right: 8, top: 13, bottom: 24});
+base = Math.min(width, 500);
+innerWidth = base - margin.left - margin.right;
+innerHeight = base-100 - margin.top - margin.bottom;
+
+viewof bandwidth = Inputs.range([.01, 1], {
+  label: "Bandweite LOESS (l)",
+  step: .01,
+  value: 1
+});
+
+viewof bw_daten = Inputs.range([.05, .5], {
+  label: "Bandweite Daten (h)",
+  step: .01,
+  value: .28
+});
+
+xScaleLoess = d3.scaleLinear()
+   .domain([-.55, .55])
+   .range([0, innerWidth]);
+
+yScaleLoess = d3.scaleLinear()
+  .domain([.2, .8])
+  .range([innerHeight, 0]);
+
+lineLoess = d3.line()
+  .x(d => xScaleLoess(d[0]))
+  .y(d => yScaleLoess(d[1]));
+
+xAxisLoess = d3.axisBottom(xScaleLoess)
+  .tickSize(innerHeight + 10)
+  .tickValues([-.5, -.25, 0, .25, .5])
+  .tickFormat(d => d);
+
+yAxisLoess = d3.axisLeft(yScaleLoess)
+  .tickSize(innerWidth + 10)
+  .tickValues([.2, .35, .5, .65, .8])
+  .tickFormat(d => d);
+
+loessRegression = d3.regressionLoess()
+  .x(d => d.StimmenTm1)
+  .y(d => d.StimmenT)
+  .bandwidth(bandwidth);
+```
+
+```{ojs}
+//| echo: false
+//| fig-cap: "Nicht-parametrische Regression auf beiden Seiten des Cut-offs."
+
+{
+  const svg = d3.select(DOM.svg(innerWidth + margin.left + margin.right + 20, innerHeight + margin.top + margin.bottom + 20))
+
+  const g = svg.append("g")
+      .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+  g.append("g")
+      .attr("class", "axis")
+      .call(xAxisLoess);
+
+  g.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(${innerWidth})`)
+    .call(yAxisLoess);
+
+  // Add X axis label:
+  g.append("text")
+    .attr("text-anchor", "end")
+    .attr("font-size", 13)
+    .attr("x", innerWidth)
+    .attr("y", innerHeight + margin.top + 25)
+    .text("Stimmenanteil Demokraten letzte Wahl");
+
+  // Y axis label:
+  g.append("text")
+    .attr("text-anchor", "end")
+    .attr("transform", "rotate(-90)")
+    .attr("font-size", 13)
+    .attr("y", -margin.left+10)
+    .attr("x", -margin.top+10)
+    .text("Stimmenanteil Demokraten");
+
+  // Distance at jump
+  g.append("text")
+   .attr("x", 250) // x-Position des Textelements
+   .attr("y", 200) // y-Position des Textelements
+   .text("") // Textinhalt
+   .attr("font-size", "14px") // Schriftgröße
+   .attr("fill", "black"); // Textfarbe
+
+
+  g.selectAll("circle")
+    .data(transpose(house_binned))
+    .enter().append("circle")
+    .attr("r", 2)
+    .attr("cx", d => xScaleLoess(d.StimmenTm1))
+    .attr("cy", d => yScaleLoess(d.StimmenT));
+
+  g.append("path")
+      .attr("class", "regression")
+      .datum(loessRegression(
+        transpose(house)
+          .filter(function(d){ return d.StimmenTm1 <= 0 & d.StimmenTm1 >= -bw_daten })
+          )
+        )
+      .attr("d", lineLoess)
+      .style("stroke", "red");
+
+  g.append("path")
+      .attr("class", "regression")
+      .datum(loessRegression(
+        transpose(house)
+          .filter(function(d){ return d.StimmenTm1 > 0 & d.StimmenTm1 <= bw_daten })
+          )
+        )
+      .attr("d", lineLoess)
+      .style("stroke", "red");
+
+  /* dashed line at cutoff */
+  g.append("line")
+  .attr("x1", xScaleLoess(0))
+  .attr("y1", 0)
+  .attr("x2", xScaleLoess(0))
+  .attr("y2", innerHeight)
+  .style("stroke", "black")
+  .style("stroke-dasharray", "1")
+  .style("stroke-width", "1");
+
+  /* dashed line data bw upper */
+  g.append("line")
+  .attr("x1", xScaleLoess(bw_daten))
+  .attr("y1", 0)
+  .attr("x2", xScaleLoess(bw_daten))
+  .attr("y2", innerHeight)
+  .style("stroke", "blue")
+  .style("stroke-dasharray", "4")
+  .style("stroke-width", "1");
+
+  /* dashed line data bw lower */
+  g.append("line")
+  .attr("x1", xScaleLoess(-bw_daten))
+  .attr("y1", 0)
+  .attr("x2", xScaleLoess(-bw_daten))
+  .attr("y2", innerHeight)
+  .style("stroke", "blue")
+  .style("stroke-dasharray", "4")
+  .style("stroke-width", "1");
+
+  return svg.node();
+}
+```

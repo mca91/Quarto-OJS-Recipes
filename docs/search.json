@@ -1,0 +1,44 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "",
+    "text": "Click here to see the raw source code of this document and here to download the quarto file.\nObservable offers many different ways to graph your data, but the line chart, bar chart, and scatterplot are basic and should definitely be learned. Tremendous flexibility and customisation are possible for such charts, but in this article we will cover only the simple cases–inspired by the ones presented here–and focus on integrating them into a simple Quarto document such that data can be manipulated and provided using R."
+  },
+  {
+    "objectID": "index.html#preliminaries",
+    "href": "index.html#preliminaries",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "Preliminaries",
+    "text": "Preliminaries\nThe .qmd file for generating this document has the following YAML header.\n\n\nCode\n---\ntitle: \"A line graph of Apple stock close prices\"\nauthor: \"Martin C. Arnold\"\nformat: \n  html:\n    css: styles.css \n    code-fold: false\n---\n\n\nstyles.css contains the following CSS code for centering SVG elements in their enclosing divs.\n\n\nCode\ndiv &gt; svg {\n  margin-left: auto;\n  margin-right: auto;\n}\n\n\n\n\nObservable plots are shown in SVG elements. Centering these is personal preference and thus optional 🙂.\nWe will make use of the below R packages.\n\n\nCode\nlibrary(tidyverse)\nlibrary(cowplot)\nlibrary(reactable)"
+  },
+  {
+    "objectID": "index.html#line-chart",
+    "href": "index.html#line-chart",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "Line chart",
+    "text": "Line chart\nWe may to attach external data for Observable plots in a chunk with header ```{OJS} and use the FileAttachement() function. We use the .csv method below since the we are dealing with a .csv file. The code below assumes that aapl.csv is in the same folder as the .qmd file. The .csv is attached with the observable notebook linked above.\n\n\nNote that there’s no need to include any JavaScript libraries in the document or chunk header–Quarto takes care of it!\n\n\nCode\n/* in OJS we would do it like this  */\ndata = FileAttachment(\"aapl.csv\")\n  .csv({typed: true});\n\n\n\n\n\n\n\nWe may now graph the data. Note that in line we set dimensions of the SVG element in line 2 using width: 600, height: 400.\n\n\nCode\nPlot.plot({\n  width: 600, height: 400,\n  marks: [\n    Plot.ruleY([40]),\n    Plot.lineY(data, {x: \"Date\", y: \"Close\"})\n  ]\n})\n\n\n\n\n\n\nFigure 1: Apple Stock – close prices\n\n\n\n\n\nHere’s an R version of the plot:\n\n\nCode\nR_data &lt;- read_csv(\n  \"aapl.csv\"\n)\nggplot(R_data, \n  aes(x = Date, y = Close)\n  ) + \n  geom_line() +\n  theme_cowplot()\n\n\n\n\n\nSome caption"
+  },
+  {
+    "objectID": "index.html#bar-chart",
+    "href": "index.html#bar-chart",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "Bar chart",
+    "text": "Bar chart\nSimilarly we may generate bar charts. Note that the dataset alphabet does not have to be included externally, because it is already available with the OJS library.\n\n\nCode\nPlot.plot({\n  width: 600, height: 400,\n  y: { label: \"freq\" },\n  marks: [\n    Plot.barY(\n      alphabet, \n      {x: \"letter\", y: \"frequency\", sort: {x: \"y\", reverse: true}}\n    ),\n    Plot.ruleY([0])\n  ]\n})\n\n\n\n\n\n\nFigure 2: Relative frequencies of letters in alphabet dataset"
+  },
+  {
+    "objectID": "index.html#scatterplot",
+    "href": "index.html#scatterplot",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "Scatterplot",
+    "text": "Scatterplot\nThe dataset cars (I think it’s the same data as in the popular R dataset) also comes with the OJS library . We create the scatterplot as follows:\n\n\nCode\nPlot.plot({\n  width: 600, height: 400,\n  marks: [\n    Plot.dot(cars, {x: \"power (hp)\", y: \"economy (mpg)\"})\n  ]\n})\n\n\n\n\n\n\nFigure 3: Fuel economy of cars in cars dataset"
+  },
+  {
+    "objectID": "index.html#d3.js",
+    "href": "index.html#d3.js",
+    "title": "Recipes for Observable plots in Quarto",
+    "section": "D3.js",
+    "text": "D3.js\nHere’s how to integrate D3 in the Quarto document. Below is a more involved example that replicates the US unemployment histogram shown here (I’ve just removed the horizontal lines). Note that we need to download unemployment-x.csv from the notebook and insert it in the same folder as the .qmd.\n\n\nCode\nd3 = require(\"d3@7\", \"d3-array@3\", \"d3-axis@3\", \"d3-regression@1\", \"d3-scale@4\", \"d3-shape@3\", \"d3-selection@3\")\n\n// Copyright 2021 Observable, Inc.\n// Released under the ISC license.\n// https://observablehq.com/@d3/histogram\nfunction Histogram(data, {\n  value = d =&gt; d, // convenience alias for x\n  domain, // convenience alias for xDomain\n  label, // convenience alias for xLabel\n  format, // convenience alias for xFormat\n  type = d3.scaleLinear, // convenience alias for xType\n  x = value, // given d in data, returns the (quantitative) x-value\n  y = () =&gt; 1, // given d in data, returns the (quantitative) weight\n  thresholds = 40, // approximate number of bins to generate, or threshold function\n  normalize, // whether to normalize values to a total of 100%\n  marginTop = 20, // top margin, in pixels\n  marginRight = 30, // right margin, in pixels\n  marginBottom = 30, // bottom margin, in pixels\n  marginLeft = 40, // left margin, in pixels\n  width = 600, // outer width of chart, in pixels\n  height = 400, // outer height of chart, in pixels\n  insetLeft = 0.5, // inset left edge of bar\n  insetRight = 0.5, // inset right edge of bar\n  xType = type, // type of x-scale\n  xDomain = domain, // [xmin, xmax]\n  xRange = [marginLeft, width - marginRight], // [left, right]\n  xLabel = label, // a label for the x-axis\n  xFormat = format, // a format specifier string for the x-axis\n  yType = d3.scaleLinear, // type of y-scale\n  yDomain, // [ymin, ymax]\n  yRange = [height - marginBottom, marginTop], // [bottom, top]\n  yLabel = \"↑ Frequency\", // a label for the y-axis\n  yFormat = normalize ? \"%\" : undefined, // a format specifier string for the y-axis\n  color = \"currentColor\" // bar fill color\n} = {}) {\n  // Compute values.\n  const X = d3.map(data, x);\n  const Y0 = d3.map(data, y);\n  const I = d3.range(X.length);\n\n  // Compute bins.\n  const bins = d3.bin().thresholds(thresholds).value(i =&gt; X[i])(I);\n  const Y = Array.from(bins, I =&gt; d3.sum(I, i =&gt; Y0[i]));\n  if (normalize) {\n    const total = d3.sum(Y);\n    for (let i = 0; i &lt; Y.length; ++i) Y[i] /= total;\n  }\n\n  // Compute default domains.\n  if (xDomain === undefined) xDomain = [bins[0].x0, bins[bins.length - 1].x1];\n  if (yDomain === undefined) yDomain = [0, d3.max(Y)];\n\n  // Construct scales and axes.\n  const xScale = xType(xDomain, xRange);\n  const yScale = yType(yDomain, yRange);\n  const xAxis = d3.axisBottom(xScale).ticks(width / 80, xFormat).tickSizeOuter(0);\n  const yAxis = d3.axisLeft(yScale).ticks(height / 40, yFormat);\n  yFormat = yScale.tickFormat(100, yFormat);\n\n  const svg = d3.create(\"svg\")\n      .attr(\"width\", width)\n      .attr(\"height\", height)\n      .attr(\"viewBox\", [0, 0, width, height])\n      .attr(\"style\", \"max-width: 100%; height: auto; height: intrinsic;\");\n\n  svg.append(\"g\")\n      .attr(\"transform\", `translate(${marginLeft},0)`)\n      .call(yAxis)\n      .call(g =&gt; g.select(\".domain\").remove())\n      .call(g =&gt; g.append(\"text\")\n          .attr(\"x\", -marginLeft)\n          .attr(\"y\", 10)\n          .attr(\"fill\", \"currentColor\")\n          .attr(\"text-anchor\", \"start\")\n          .text(yLabel));\n\n  svg.append(\"g\")\n      .attr(\"fill\", color)\n    .selectAll(\"rect\")\n    .data(bins)\n    .join(\"rect\")\n      .attr(\"x\", d =&gt; xScale(d.x0) + insetLeft)\n      .attr(\"width\", d =&gt; Math.max(0, xScale(d.x1) - xScale(d.x0) - insetLeft - insetRight))\n      .attr(\"y\", (d, i) =&gt; yScale(Y[i]))\n      .attr(\"height\", (d, i) =&gt; yScale(0) - yScale(Y[i]))\n    .append(\"title\")\n      .text((d, i) =&gt; [`${d.x0} ≤ x &lt; ${d.x1}`, yFormat(Y[i])].join(\"\\n\"));\n\n  svg.append(\"g\")\n      .attr(\"transform\", `translate(0,${height - marginBottom})`)\n      .call(xAxis)\n      .call(g =&gt; g.append(\"text\")\n          .attr(\"x\", width - marginRight)\n          .attr(\"y\", 27)\n          .attr(\"fill\", \"currentColor\")\n          .attr(\"text-anchor\", \"end\")\n          .text(xLabel));\n\n  return svg.node();\n}\n\nunemployment = FileAttachment(\"unemployment-x.csv\").csv({typed: true})\n\nchart = Histogram(unemployment, {\n  value: d =&gt; d.rate,\n  label: \"Unemployment rate (%) →\",\n  color: \"steelblue\"\n})"
+  }
+]
